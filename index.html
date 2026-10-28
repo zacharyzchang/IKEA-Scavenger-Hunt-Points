@@ -400,12 +400,10 @@
     // Passcode Auth Logic
     btnAdminAuth.addEventListener('click', () => {
       if (isAdminUnlocked) {
-        // Lock back to public mode
         isAdminUnlocked = false;
         updateViewMode();
         showToast("Logged out of Scorekeeper Mode");
       } else {
-        // Open passcode modal
         passcodeError.classList.add('hidden');
         passcodeInput.value = '';
         passcodeModal.classList.remove('hidden');
@@ -434,10 +432,8 @@
       }
     });
 
-    // Update UI View Mode based on Admin Passcode State
     function updateViewMode() {
       if (isAdminUnlocked) {
-        // Scorekeeper Mode Active
         authBtnIcon.className = "fa-solid fa-lock-open text-xs";
         authBtnLabel.innerText = "Exit Scorekeeper";
         btnAdminAuth.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/30 text-xs font-semibold transition duration-200 shadow-md shadow-emerald-600/20";
@@ -451,7 +447,6 @@
         leaderboardView.classList.add('hidden');
         teamsGrid.classList.remove('hidden');
       } else {
-        // Public Leaderboard Mode Active
         authBtnIcon.className = "fa-solid fa-lock text-xs";
         authBtnLabel.innerText = "Scorekeeper Login";
         btnAdminAuth.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 text-xs font-semibold transition duration-200 shadow-md shadow-indigo-600/20";
@@ -469,16 +464,27 @@
       renderTeams();
     }
 
-    // Initialize Data Source
+    // Initialize Data Source with detailed error catching
     async function initFirebase() {
       const config = typeof window.firebaseConfig !== 'undefined' ? window.firebaseConfig : null;
-      const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
 
       if (config && config.apiKey) {
         try {
+          console.log("Initializing Firebase with project ID:", config.projectId);
           const app = initializeApp(config);
           db = getFirestore(app);
           auth = getAuth(app);
+
+          onAuthStateChanged(auth, (user) => {
+            if (user) {
+              currentUser = user;
+              isFirebaseActive = true;
+              updateConnectionStatus(true, "Live Synced");
+              listenToTeamsData();
+            } else {
+              console.warn("Firebase Auth user is null, checking sign in...");
+            }
+          });
 
           if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
             await signInWithCustomToken(auth, window.__initial_auth_token);
@@ -486,19 +492,11 @@
             await signInAnonymously(auth);
           }
 
-          onAuthStateChanged(auth, (user) => {
-            if (user) {
-              currentUser = user;
-              isFirebaseActive = true;
-              updateConnectionStatus(true, "Live Synced");
-              listenToTeamsData(currentAppId);
-            } else {
-              initLocalFallback("Offline Mode");
-            }
-          });
           return;
         } catch (err) {
-          console.warn("Firebase initialization error, falling back to local sync:", err);
+          console.error("Firebase connection caught error:", err);
+          initLocalFallback("Firebase Error: " + (err.code || err.message));
+          return;
         }
       }
 
@@ -507,7 +505,7 @@
 
     function initLocalFallback(statusMsg) {
       isFirebaseActive = false;
-      updateConnectionStatus(true, statusMsg);
+      updateConnectionStatus(false, statusMsg);
       loadLocalTeamsData();
 
       if (broadcastChannel) {
@@ -554,19 +552,19 @@
         statusPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold";
         statusText.innerText = customMsg || "Live Synced";
       } else {
-        statusPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold";
-        statusText.innerText = customMsg || "Offline";
+        statusPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold";
+        statusText.innerText = customMsg || "Offline Mode";
       }
     }
 
-    function getTeamsCollectionRef(appId) {
-      return collection(db, 'artifacts', appId, 'public', 'data', 'teams');
+    function getTeamsCollectionRef() {
+      return collection(db, 'teams');
     }
 
-    function listenToTeamsData(appId) {
+    function listenToTeamsData() {
       if (!currentUser || !isFirebaseActive) return;
 
-      const teamsRef = getTeamsCollectionRef(appId);
+      const teamsRef = getTeamsCollectionRef();
       
       onSnapshot(teamsRef, (snapshot) => {
         teamsData = [];
@@ -578,11 +576,10 @@
         updateSummaryStats();
       }, (error) => {
         console.error("Firestore snapshot error:", error);
-        initLocalFallback("Snapshot Error (Local)");
+        initLocalFallback("Permission/Rules Error");
       });
     }
 
-    // Render Teams across Public Leaderboard & Admin Grid Views
     function renderTeams() {
       if (teamsData.length === 0) {
         leaderboardView.innerHTML = '';
@@ -593,7 +590,6 @@
 
       emptyState.classList.add('hidden');
 
-      // Sort teams locally
       const sortedTeams = [...teamsData].sort((a, b) => {
         if (sortByScore) {
           if (b.score !== a.score) return b.score - a.score;
@@ -603,7 +599,6 @@
         }
       });
 
-      // Render 1: Public Leaderboard Row View
       leaderboardView.innerHTML = sortedTeams.map((team, index) => {
         const teamColor = team.color || '#6366f1';
         const rank = index + 1;
@@ -615,7 +610,6 @@
 
         return `
           <div class="glass-card rounded-xl p-4 flex items-center justify-between gap-4 transition duration-200 hover:bg-slate-800/80 relative overflow-hidden">
-            <!-- Team Color Accent Indicator -->
             <div class="absolute left-0 top-0 bottom-0 w-2" style="background-color: ${teamColor}"></div>
 
             <div class="flex items-center space-x-4 pl-2 min-w-0">
@@ -629,7 +623,6 @@
               </div>
             </div>
 
-            <!-- Prominent Score Number -->
             <div class="px-4 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-right font-black text-2xl sm:text-3xl text-indigo-300 min-w-[5rem] text-center">
               ${team.score}
             </div>
@@ -637,17 +630,14 @@
         `;
       }).join('');
 
-      // Render 2: Scorekeeper Controls Grid View
       teamsGrid.innerHTML = sortedTeams.map((team, index) => {
         const isLeader = sortByScore && index === 0 && team.score > 0;
         const teamColor = team.color || '#6366f1';
         
         return `
           <div class="glass-card rounded-lg p-2 flex flex-col justify-between transition-all duration-200 relative overflow-hidden group hover:border-slate-600 shadow-sm">
-            
             <div class="absolute inset-x-0 top-0 h-1" style="background-color: ${teamColor}"></div>
 
-            <!-- Team Header & Rank Badge -->
             <div class="flex items-center justify-between gap-1 pt-0.5 mb-1">
               <div class="min-w-0 flex-1 flex items-center space-x-1">
                 <span class="text-[10px] font-bold text-slate-400 font-mono">#${index + 1}</span>
@@ -656,7 +646,6 @@
                 </h3>
               </div>
 
-              <!-- Delete Button -->
               <button onclick="window.deleteTeam('${team.id}', '${escapeHtml(team.name)}')" 
                 class="text-slate-500 hover:text-red-400 p-0.5 rounded hover:bg-red-500/10 transition opacity-60 group-hover:opacity-100 flex-shrink-0"
                 title="Remove Team">
@@ -664,7 +653,6 @@
               </button>
             </div>
 
-            <!-- Score Display -->
             <div class="my-1 py-1 px-2 rounded bg-slate-900/90 border border-slate-800/80 text-center flex items-center justify-center space-x-1.5">
               <div class="text-xl font-black text-slate-100 tracking-tight">
                 ${team.score}
@@ -676,9 +664,7 @@
               ` : ''}
             </div>
 
-            <!-- Point Control Buttons (+1/-1 and +5/-5) -->
             <div class="space-y-1">
-              <!-- Quick 1 Point Row -->
               <div class="grid grid-cols-2 gap-1">
                 <button onclick="window.updateScore('${team.id}', -1)" 
                   class="py-0.5 px-1 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-[10px] border border-slate-700/80 transition flex items-center justify-center space-x-0.5">
@@ -693,7 +679,6 @@
                 </button>
               </div>
 
-              <!-- 5 Points Row -->
               <div class="grid grid-cols-2 gap-1">
                 <button onclick="window.updateScore('${team.id}', -5)" 
                   class="py-0.5 px-1 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-[10px] border border-slate-700/80 transition flex items-center justify-center space-x-0.5">
@@ -708,13 +693,11 @@
                 </button>
               </div>
 
-              <!-- Manual Override -->
               <button onclick="window.openEditModal('${team.id}', '${escapeHtml(team.name)}', ${team.score})" 
                 class="w-full py-0.5 rounded bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-[9px] font-medium border border-slate-800/80 transition flex items-center justify-center">
                 <span>Set Score</span>
               </button>
             </div>
-
           </div>
         `;
       }).join('');
@@ -748,7 +731,6 @@
       combinedScoreDisplay.innerText = totalPoints;
     }
 
-    // Add Team
     addTeamForm.addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -759,8 +741,7 @@
 
       if (isFirebaseActive && currentUser) {
         try {
-          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
-          const teamsRef = getTeamsCollectionRef(currentAppId);
+          const teamsRef = getTeamsCollectionRef();
           const newDocRef = doc(teamsRef);
 
           await setDoc(newDocRef, {
@@ -791,12 +772,10 @@
       }
     });
 
-    // Update Score (+1, -1, +5, -5)
     window.updateScore = async function(teamId, delta) {
       if (isFirebaseActive && currentUser) {
         try {
-          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
-          const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', teamId);
+          const teamRef = doc(db, 'teams', teamId);
           await updateDoc(teamRef, {
             score: increment(delta)
           });
@@ -813,14 +792,12 @@
       }
     };
 
-    // Delete Team
     window.deleteTeam = async function(teamId, teamName) {
       if (!confirm(`Are you sure you want to delete ${teamName}?`)) return;
 
       if (isFirebaseActive && currentUser) {
         try {
-          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
-          const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', teamId);
+          const teamRef = doc(db, 'teams', teamId);
           await deleteDoc(teamRef);
           showToast(`Deleted team "${teamName}"`);
         } catch (err) {
@@ -834,7 +811,6 @@
       }
     };
 
-    // Manual Override Modal Functions
     window.openEditModal = function(id, name, currentScore) {
       modalTeamId.value = id;
       modalTeamName.innerText = `Updating score for ${name}`;
@@ -860,8 +836,7 @@
 
       if (isFirebaseActive && currentUser) {
         try {
-          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
-          const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', teamId);
+          const teamRef = doc(db, 'teams', teamId);
           await updateDoc(teamRef, {
             score: newScore
           });
@@ -882,24 +857,21 @@
       }
     });
 
-    // Toggle Leaderboard Sorting Mode
     btnToggleSort.addEventListener('click', () => {
       sortByScore = !sortByScore;
       sortLabelText.innerText = sortByScore ? "Ranked View" : "Order Added";
       renderTeams();
     });
 
-    // Reset All Scores To 0
     resetAllBtn.addEventListener('click', async () => {
       if (teamsData.length === 0) return;
       if (!confirm("Are you sure you want to reset all team scores back to 0?")) return;
 
       if (isFirebaseActive && currentUser) {
         try {
-          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
           const batch = writeBatch(db);
           teamsData.forEach(team => {
-            const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', team.id);
+            const teamRef = doc(db, 'teams', team.id);
             batch.update(teamRef, { score: 0 });
           });
           await batch.commit();
@@ -915,7 +887,6 @@
       }
     });
 
-    // Notification Toast Helper
     function showToast(message, type = 'success') {
       const toast = document.getElementById('toast');
       const toastMsg = document.getElementById('toast-message');
@@ -938,7 +909,6 @@
       }, 2500);
     }
 
-    // Startup Initialization
     initColorPicker();
     updateViewMode();
     initFirebase();
