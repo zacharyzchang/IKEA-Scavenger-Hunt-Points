@@ -17,14 +17,15 @@
   <!-- STEP 4: PASTE YOUR FIREBASE CONFIGURATION HERE BEFORE DEPLOYING          -->
   <!-- ========================================================================= -->
   <script>
-    const firebaseConfig = {
-  apiKey: "AIzaSyAfB-SvPaqnWUZ6dctS1ffyYYNMLxxKNQo",
-  authDomain: "ikea-scav-points.firebaseapp.com",
-  projectId: "ikea-scav-points",
-  storageBucket: "ikea-scav-points.firebasestorage.app",
-  messagingSenderId: "265770790919",
-  appId: "1:265770790919:web:7e65470ce51596cbebbaa2"
-};
+    window.firebaseConfig = {
+      apiKey: "AIzaSyAfB-SvPaqnWUZ6dctS1ffyYYNMLxxKNQo",
+      authDomain: "ikea-scav-points.firebaseapp.com",
+      databaseURL: "https://ikea-scav-points-default-rtdb.firebaseio.com",
+      projectId: "ikea-scav-points",
+      storageBucket: "ikea-scav-points.firebasestorage.app",
+      messagingSenderId: "265770790919",
+      appId: "1:265770790919:web:7e65470ce51596cbebbaa2"
+    };
     window.appId = "live-scoreboard";
   </script>
 
@@ -207,7 +208,7 @@
         <i class="fa-solid fa-trophy"></i>
       </div>
       <h3 class="text-lg font-bold text-slate-300">No teams registered yet</h3>
-      <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1">Unlock scorekeeper mode with passcode 7778 to add teams and update points!</p>
+      <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1">Log in using Scorekeeper mode above to add teams and update points!</p>
     </div>
 
     <!-- Public Leaderboard View (Ranked Big Display) -->
