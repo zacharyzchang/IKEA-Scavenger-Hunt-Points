@@ -125,10 +125,22 @@
         </span>
         <span id="banner-message" class="text-slate-400">Viewing real-time ranked points. Click "Scorekeeper Login" to modify scores.</span>
       </div>
-      <button id="btn-toggle-sort" class="flex items-center space-x-1 text-indigo-400 hover:text-indigo-300 font-semibold transition">
-        <i class="fa-solid fa-arrow-down-wide-short"></i>
-        <span id="sort-label-text">Ranked View</span>
-      </button>
+      <div class="flex items-center space-x-3">
+        <!-- Data Migration Controls -->
+        <button id="btn-export-data" class="hidden text-slate-400 hover:text-indigo-300 font-semibold transition flex items-center space-x-1" title="Export local JSON backup">
+          <i class="fa-solid fa-file-arrow-down"></i>
+          <span>Export Local Data</span>
+        </button>
+        <label id="label-import-data" class="hidden text-slate-400 hover:text-indigo-300 font-semibold transition cursor-pointer flex items-center space-x-1" title="Import JSON data to Firebase">
+          <i class="fa-solid fa-file-arrow-up"></i>
+          <span>Import to Live</span>
+          <input type="file" id="input-import-file" accept=".json" class="hidden">
+        </label>
+        <button id="btn-toggle-sort" class="flex items-center space-x-1 text-indigo-400 hover:text-indigo-300 font-semibold transition">
+          <i class="fa-solid fa-arrow-down-wide-short"></i>
+          <span id="sort-label-text">Ranked View</span>
+        </button>
+      </div>
     </div>
 
     <!-- Admin Panel: Add New Team (Hidden in Leaderboard view) -->
@@ -305,7 +317,8 @@
       deleteDoc, 
       onSnapshot, 
       increment,
-      writeBatch
+      writeBatch,
+      getDocs
     } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Application State & Passcode Guard Config
@@ -349,6 +362,9 @@
     const totalTeamsDisplay = document.getElementById('total-teams-count');
     const topScoreDisplay = document.getElementById('top-score-display');
     const combinedScoreDisplay = document.getElementById('combined-score-display');
+    const btnExportData = document.getElementById('btn-export-data');
+    const labelImportData = document.getElementById('label-import-data');
+    const inputImportFile = document.getElementById('input-import-file');
 
     // Passcode Modal Elements
     const passcodeModal = document.getElementById('passcode-modal');
@@ -444,6 +460,8 @@
 
         adminPanel.classList.remove('hidden');
         resetAllBtn.classList.remove('hidden');
+        btnExportData.classList.remove('hidden');
+        labelImportData.classList.remove('hidden');
         leaderboardView.classList.add('hidden');
         teamsGrid.classList.remove('hidden');
       } else {
@@ -457,6 +475,8 @@
 
         adminPanel.classList.add('hidden');
         resetAllBtn.classList.add('hidden');
+        btnExportData.classList.add('hidden');
+        labelImportData.classList.add('hidden');
         leaderboardView.classList.remove('hidden');
         teamsGrid.classList.add('hidden');
       }
@@ -885,6 +905,76 @@
         saveLocalTeamsData();
         showToast("All scores reset to 0");
       }
+    });
+
+    // Export local storage backup
+    btnExportData.addEventListener('click', () => {
+      let dataToExport = teamsData;
+      // If firebase is active, let's pull local backup if it has items, otherwise current teamsData
+      try {
+        const localBackup = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (localBackup) {
+          dataToExport = JSON.parse(localBackup);
+        }
+      } catch (e) {}
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToExport, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `scoreboard_backup_${new Date().toISOString().slice(0, 10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast("Local data exported successfully");
+    });
+
+    // Import local backup into live Firebase database
+    inputImportFile.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function(event) {
+        try {
+          const importedTeams = JSON.parse(event.target.result);
+          if (!Array.isArray(importedTeams)) {
+            showToast("Invalid JSON file format", "error");
+            return;
+          }
+
+          if (!confirm(`Found ${importedTeams.length} teams in backup. Import and upload them to the live database?`)) {
+            inputImportFile.value = '';
+            return;
+          }
+
+          if (isFirebaseActive && currentUser) {
+            const teamsRef = getTeamsCollectionRef();
+            const batch = writeBatch(db);
+
+            importedTeams.forEach(team => {
+              const newRef = doc(teamsRef);
+              batch.set(newRef, {
+                name: team.name || "Unnamed Team",
+                score: typeof team.score === 'number' ? team.score : 0,
+                color: team.color || '#6366f1',
+                createdAt: team.createdAt || Date.now()
+              });
+            });
+
+            await batch.commit();
+            showToast(`Successfully imported ${importedTeams.length} teams to Live!`);
+          } else {
+            teamsData = importedTeams;
+            saveLocalTeamsData();
+            showToast("Imported successfully to local storage");
+          }
+        } catch (err) {
+          console.error("Import error:", err);
+          showToast("Failed to parse JSON backup file", "error");
+        }
+        inputImportFile.value = '';
+      };
+      reader.readAsText(file);
     });
 
     function showToast(message, type = 'success') {
