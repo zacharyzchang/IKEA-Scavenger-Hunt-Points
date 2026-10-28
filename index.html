@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time Team Score Tracker</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- ========================================================================= -->
+  <!-- STEP 4: PASTE YOUR FIREBASE CONFIGURATION HERE BEFORE DEPLOYING          -->
+  <!-- ========================================================================= -->
+  <script>
+    const firebaseConfig = {
+  apiKey: "AIzaSyAfB-SvPaqnWUZ6dctS1ffyYYNMLxxKNQo",
+  authDomain: "ikea-scav-points.firebaseapp.com",
+  projectId: "ikea-scav-points",
+  storageBucket: "ikea-scav-points.firebasestorage.app",
+  messagingSenderId: "265770790919",
+  appId: "1:265770790919:web:7e65470ce51596cbebbaa2"
+};
+    window.appId = "live-scoreboard";
+  </script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          animation: {
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'bounce-short': 'bounce 0.5s ease-in-out 1',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .glow-effect {
+      box-shadow: 0 0 25px -5px var(--glow-color, rgba(99, 102, 241, 0.3));
+    }
+  </style>
+</head>
+<body class="min-h-full flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Header Navigation -->
+  <header class="sticky top-0 z-30 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-4 py-3 sm:px-8">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg shadow-amber-500/30">
+          <i class="fa-solid fa-trophy"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-amber-300 bg-clip-text text-transparent">
+            Live Scoreboard
+          </h1>
+          <p class="text-xs text-slate-400 font-medium">Real-Time Team Points Tally</p>
+        </div>
+      </div>
+
+      <!-- Connection Status & View Switcher / Auth Controls -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Live Status Pill -->
+        <div id="status-pill" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="status-text">Connecting...</span>
+        </div>
+
+        <!-- View Mode Indicator / Lock Toggle -->
+        <button id="btn-admin-auth" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 text-xs font-semibold transition duration-200 shadow-md shadow-indigo-600/20">
+          <i id="auth-btn-icon" class="fa-solid fa-lock text-xs"></i>
+          <span id="auth-btn-label">Scorekeeper Login</span>
+        </button>
+
+        <!-- Reset All Button (Admin Only) -->
+        <button id="btn-reset-all" class="hidden flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 text-xs font-medium transition duration-200">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span class="hidden sm:inline">Reset All</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- View Mode Banner Notification -->
+    <div id="view-banner" class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs">
+      <div class="flex items-center space-x-2">
+        <span id="banner-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+          Public Leaderboard
+        </span>
+        <span id="banner-message" class="text-slate-400">Viewing real-time ranked points. Click "Scorekeeper Login" to modify scores.</span>
+      </div>
+      <button id="btn-toggle-sort" class="flex items-center space-x-1 text-indigo-400 hover:text-indigo-300 font-semibold transition">
+        <i class="fa-solid fa-arrow-down-wide-short"></i>
+        <span id="sort-label-text">Ranked View</span>
+      </button>
+    </div>
+
+    <!-- Admin Panel: Add New Team (Hidden in Leaderboard view) -->
+    <div id="admin-panel" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- New Team Form -->
+      <div class="lg:col-span-2 glass-card rounded-2xl p-5 shadow-xl">
+        <h2 class="text-lg font-bold text-slate-100 mb-3 flex items-center space-x-2">
+          <span>Add New Team</span>
+        </h2>
+        
+        <form id="add-team-form" class="space-y-4">
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="flex-1">
+              <input type="text" id="team-name" placeholder="Enter Team or Player Name..." required
+                class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-slate-100 placeholder-slate-500 text-sm outline-none transition">
+            </div>
+            
+            <button type="submit" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/30 transition duration-200 flex items-center justify-center space-x-2">
+              <span>Add Team</span>
+            </button>
+          </div>
+
+          <!-- Color Selection -->
+          <div class="flex flex-wrap items-center justify-between gap-4 pt-1">
+            <div class="flex items-center space-x-3 w-full sm:w-auto">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Team Color:</span>
+              <div class="flex items-center space-x-2">
+                <div class="relative flex items-center justify-center">
+                  <input type="color" id="team-color-picker" value="#6366f1"
+                    class="w-8 h-8 rounded-lg border-2 border-slate-700 bg-slate-900 cursor-pointer p-0.5 outline-none transition hover:border-indigo-400">
+                </div>
+                <input type="text" id="team-color-hex" value="#6366f1" placeholder="#HEX" maxLength="7"
+                  class="w-24 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg px-2.5 py-1 text-xs font-mono text-slate-200 outline-none uppercase">
+              </div>
+            </div>
+
+            <!-- Quick Swatches -->
+            <div class="flex items-center space-x-1.5 overflow-x-auto py-1">
+              <span class="text-xs font-medium text-slate-500 mr-1">Presets:</span>
+              <div id="quick-swatches" class="flex space-x-1.5">
+                <!-- Swatches generated in JS -->
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Quick Metrics Overview -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Session Stats</span>
+          <span class="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold" id="total-teams-count">0 Teams</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-center">
+            <span class="text-xs text-slate-400 block mb-1">Leader Score</span>
+            <span id="top-score-display" class="text-2xl font-black text-amber-400">0</span>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-center">
+            <span class="text-xs text-slate-400 block mb-1">Total Points</span>
+            <span id="combined-score-display" class="text-2xl font-black text-indigo-400">0</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800">
+          <span>Synced across all connected devices</span>
+          <i class="fa-solid fa-arrows-rotate text-indigo-400 animate-spin" style="animation-duration: 4s;"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State Prompt -->
+    <div id="empty-state" class="hidden py-16 text-center glass-card rounded-2xl border border-dashed border-slate-800">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-900/80 border border-slate-800 flex items-center justify-center text-slate-600 text-2xl">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h3 class="text-lg font-bold text-slate-300">No teams registered yet</h3>
+      <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1">Unlock scorekeeper mode with passcode 7778 to add teams and update points!</p>
+    </div>
+
+    <!-- Public Leaderboard View (Ranked Big Display) -->
+    <div id="leaderboard-view" class="space-y-3">
+      <!-- Dynamic Leaderboard rows injected here -->
+    </div>
+
+    <!-- Scorekeeper Control Grid View (Optimized for active point management) -->
+    <div id="teams-grid" class="hidden grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5">
+      <!-- Dynamic team scorekeeper cards injected here -->
+    </div>
+
+  </main>
+
+  <!-- Passcode Entry Modal -->
+  <div id="passcode-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md hidden transition-opacity">
+    <div class="glass-card bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl relative text-center">
+      <button id="passcode-modal-close" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 transition">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-xl">
+        <i class="fa-solid fa-key"></i>
+      </div>
+
+      <h3 class="text-lg font-bold text-slate-100">Scorekeeper Access</h3>
+      <p class="text-xs text-slate-400 mt-1 mb-4">Enter the 4-digit passcode to unlock score controls</p>
+
+      <form id="passcode-form" class="space-y-4">
+        <div>
+          <input type="password" id="passcode-input" maxlength="4" placeholder="••••" autocomplete="off" autofocus required
+            class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 rounded-xl px-4 py-3 text-2xl font-mono text-center tracking-[0.5em] text-slate-100 outline-none">
+          <p id="passcode-error" class="text-xs text-rose-400 mt-2 font-medium hidden">Incorrect passcode. Try again.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <button type="button" id="passcode-cancel-btn" class="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+            Cancel
+          </button>
+          <button type="submit" class="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition">
+            Unlock
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Manual Edit Score Modal -->
+  <div id="edit-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden transition-opacity">
+    <div class="glass-card bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+      <button id="modal-close-btn" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200 transition">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <h3 class="text-lg font-bold text-slate-100 mb-1">Manual Score Override</h3>
+      <p id="modal-team-name" class="text-sm text-slate-400 mb-4">Set direct score for Team</p>
+
+      <form id="edit-score-form" class="space-y-4">
+        <input type="hidden" id="modal-team-id">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">New Exact Score</label>
+          <input type="number" id="modal-score-input" required step="1"
+            class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-3 text-slate-100 text-xl font-bold text-center outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-2">
+          <button type="button" id="modal-cancel-btn" class="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition">
+            Cancel
+          </button>
+          <button type="submit" class="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/30 transition">
+            Save Override
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Custom Alert Toast -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center space-x-3 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 shadow-2xl">
+    <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+    <span id="toast-message" class="text-sm font-medium">Notification</span>
+  </div>
+
+  <!-- Firebase & Logic Script -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      doc, 
+      setDoc, 
+      updateDoc, 
+      deleteDoc, 
+      onSnapshot, 
+      increment,
+      writeBatch
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Application State & Passcode Guard Config
+    const PASSCODE = "7778";
+    let isAdminUnlocked = false;
+
+    let db = null, auth = null;
+    let currentUser = null;
+    let teamsData = [];
+    let sortByScore = true;
+    let isFirebaseActive = false;
+    const LOCAL_STORAGE_KEY = 'scoreboard_live_teams_data';
+    const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('scoreboard_channel') : null;
+
+    // Preset Extended Colors
+    const PRESET_COLORS = [
+      '#6366f1', '#3b82f6', '#06b6d4', '#10b981', '#84cc16', 
+      '#eab308', '#f97316', '#ef4444', '#ec4899', '#a855f7',
+      '#64748b', '#14b8a6'
+    ];
+
+    // DOM Elements
+    const statusPill = document.getElementById('status-pill');
+    const statusText = document.getElementById('status-text');
+    const teamColorPicker = document.getElementById('team-color-picker');
+    const teamColorHex = document.getElementById('team-color-hex');
+    const quickSwatchesContainer = document.getElementById('quick-swatches');
+    const addTeamForm = document.getElementById('add-team-form');
+    const leaderboardView = document.getElementById('leaderboard-view');
+    const teamsGrid = document.getElementById('teams-grid');
+    const emptyState = document.getElementById('empty-state');
+    const adminPanel = document.getElementById('admin-panel');
+    const btnAdminAuth = document.getElementById('btn-admin-auth');
+    const authBtnIcon = document.getElementById('auth-btn-icon');
+    const authBtnLabel = document.getElementById('auth-btn-label');
+    const bannerBadge = document.getElementById('banner-badge');
+    const bannerMessage = document.getElementById('banner-message');
+    const btnToggleSort = document.getElementById('btn-toggle-sort');
+    const sortLabelText = document.getElementById('sort-label-text');
+    const resetAllBtn = document.getElementById('btn-reset-all');
+    const totalTeamsDisplay = document.getElementById('total-teams-count');
+    const topScoreDisplay = document.getElementById('top-score-display');
+    const combinedScoreDisplay = document.getElementById('combined-score-display');
+
+    // Passcode Modal Elements
+    const passcodeModal = document.getElementById('passcode-modal');
+    const passcodeForm = document.getElementById('passcode-form');
+    const passcodeInput = document.getElementById('passcode-input');
+    const passcodeError = document.getElementById('passcode-error');
+    const passcodeModalClose = document.getElementById('passcode-modal-close');
+    const passcodeCancelBtn = document.getElementById('passcode-cancel-btn');
+
+    // Override Modal Elements
+    const editModal = document.getElementById('edit-modal');
+    const modalTeamId = document.getElementById('modal-team-id');
+    const modalTeamName = document.getElementById('modal-team-name');
+    const modalScoreInput = document.getElementById('modal-score-input');
+    const editScoreForm = document.getElementById('edit-score-form');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+    // Initialize Color Picker Inputs & Preset Swatches
+    function initColorPicker() {
+      teamColorPicker.addEventListener('input', (e) => {
+        teamColorHex.value = e.target.value.toUpperCase();
+      });
+
+      teamColorHex.addEventListener('input', (e) => {
+        let hex = e.target.value;
+        if (!hex.startsWith('#')) hex = '#' + hex;
+        if (/^#[0-9A-F]{6}$/i.test(hex)) {
+          teamColorPicker.value = hex;
+        }
+      });
+
+      quickSwatchesContainer.innerHTML = PRESET_COLORS.map(color => `
+        <button type="button" data-color="${color}" 
+          class="w-5 h-5 rounded-full transition-transform transform hover:scale-125 border border-slate-700 flex-shrink-0"
+          style="background-color: ${color}">
+        </button>
+      `).join('');
+
+      quickSwatchesContainer.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const color = e.currentTarget.dataset.color;
+          teamColorPicker.value = color;
+          teamColorHex.value = color.toUpperCase();
+        });
+      });
+    }
+
+    // Passcode Auth Logic
+    btnAdminAuth.addEventListener('click', () => {
+      if (isAdminUnlocked) {
+        // Lock back to public mode
+        isAdminUnlocked = false;
+        updateViewMode();
+        showToast("Logged out of Scorekeeper Mode");
+      } else {
+        // Open passcode modal
+        passcodeError.classList.add('hidden');
+        passcodeInput.value = '';
+        passcodeModal.classList.remove('hidden');
+        setTimeout(() => passcodeInput.focus(), 100);
+      }
+    });
+
+    function closePasscodeModal() {
+      passcodeModal.classList.add('hidden');
+    }
+
+    passcodeModalClose.addEventListener('click', closePasscodeModal);
+    passcodeCancelBtn.addEventListener('click', closePasscodeModal);
+
+    passcodeForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (passcodeInput.value === PASSCODE) {
+        isAdminUnlocked = true;
+        closePasscodeModal();
+        updateViewMode();
+        showToast("Access Granted: Scorekeeper Mode Active");
+      } else {
+        passcodeError.classList.remove('hidden');
+        passcodeInput.value = '';
+        passcodeInput.focus();
+      }
+    });
+
+    // Update UI View Mode based on Admin Passcode State
+    function updateViewMode() {
+      if (isAdminUnlocked) {
+        // Scorekeeper Mode Active
+        authBtnIcon.className = "fa-solid fa-lock-open text-xs";
+        authBtnLabel.innerText = "Exit Scorekeeper";
+        btnAdminAuth.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/30 text-xs font-semibold transition duration-200 shadow-md shadow-emerald-600/20";
+        
+        bannerBadge.innerText = "Scorekeeper Mode";
+        bannerBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+        bannerMessage.innerText = "Full score editing unlocked (+1, +5, override, add/delete teams).";
+
+        adminPanel.classList.remove('hidden');
+        resetAllBtn.classList.remove('hidden');
+        leaderboardView.classList.add('hidden');
+        teamsGrid.classList.remove('hidden');
+      } else {
+        // Public Leaderboard Mode Active
+        authBtnIcon.className = "fa-solid fa-lock text-xs";
+        authBtnLabel.innerText = "Scorekeeper Login";
+        btnAdminAuth.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 text-xs font-semibold transition duration-200 shadow-md shadow-indigo-600/20";
+
+        bannerBadge.innerText = "Public Leaderboard";
+        bannerBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30";
+        bannerMessage.innerText = "Viewing real-time ranked points. Click 'Scorekeeper Login' to modify scores.";
+
+        adminPanel.classList.add('hidden');
+        resetAllBtn.classList.add('hidden');
+        leaderboardView.classList.remove('hidden');
+        teamsGrid.classList.add('hidden');
+      }
+
+      renderTeams();
+    }
+
+    // Initialize Data Source
+    async function initFirebase() {
+      const config = typeof window.firebaseConfig !== 'undefined' ? window.firebaseConfig : null;
+      const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
+
+      if (config && config.apiKey) {
+        try {
+          const app = initializeApp(config);
+          db = getFirestore(app);
+          auth = getAuth(app);
+
+          if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
+            await signInWithCustomToken(auth, window.__initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+
+          onAuthStateChanged(auth, (user) => {
+            if (user) {
+              currentUser = user;
+              isFirebaseActive = true;
+              updateConnectionStatus(true, "Live Synced");
+              listenToTeamsData(currentAppId);
+            } else {
+              initLocalFallback("Offline Mode");
+            }
+          });
+          return;
+        } catch (err) {
+          console.warn("Firebase initialization error, falling back to local sync:", err);
+        }
+      }
+
+      initLocalFallback("Local Storage Mode");
+    }
+
+    function initLocalFallback(statusMsg) {
+      isFirebaseActive = false;
+      updateConnectionStatus(true, statusMsg);
+      loadLocalTeamsData();
+
+      if (broadcastChannel) {
+        broadcastChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'SYNC_TEAMS') {
+            loadLocalTeamsData();
+          }
+        };
+      }
+
+      window.addEventListener('storage', (e) => {
+        if (e.key === LOCAL_STORAGE_KEY) {
+          loadLocalTeamsData();
+        }
+      });
+    }
+
+    function loadLocalTeamsData() {
+      try {
+        const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+        teamsData = stored ? JSON.parse(stored) : [];
+        renderTeams();
+        updateSummaryStats();
+      } catch (err) {
+        console.error("Error reading local data:", err);
+      }
+    }
+
+    function saveLocalTeamsData() {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(teamsData));
+        if (broadcastChannel) {
+          broadcastChannel.postMessage({ type: 'SYNC_TEAMS' });
+        }
+        renderTeams();
+        updateSummaryStats();
+      } catch (err) {
+        console.error("Error saving local data:", err);
+      }
+    }
+
+    function updateConnectionStatus(isConnected, customMsg) {
+      if (isConnected) {
+        statusPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold";
+        statusText.innerText = customMsg || "Live Synced";
+      } else {
+        statusPill.className = "flex items-center space-x-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold";
+        statusText.innerText = customMsg || "Offline";
+      }
+    }
+
+    function getTeamsCollectionRef(appId) {
+      return collection(db, 'artifacts', appId, 'public', 'data', 'teams');
+    }
+
+    function listenToTeamsData(appId) {
+      if (!currentUser || !isFirebaseActive) return;
+
+      const teamsRef = getTeamsCollectionRef(appId);
+      
+      onSnapshot(teamsRef, (snapshot) => {
+        teamsData = [];
+        snapshot.forEach((doc) => {
+          teamsData.push({ id: doc.id, ...doc.data() });
+        });
+
+        renderTeams();
+        updateSummaryStats();
+      }, (error) => {
+        console.error("Firestore snapshot error:", error);
+        initLocalFallback("Snapshot Error (Local)");
+      });
+    }
+
+    // Render Teams across Public Leaderboard & Admin Grid Views
+    function renderTeams() {
+      if (teamsData.length === 0) {
+        leaderboardView.innerHTML = '';
+        teamsGrid.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      // Sort teams locally
+      const sortedTeams = [...teamsData].sort((a, b) => {
+        if (sortByScore) {
+          if (b.score !== a.score) return b.score - a.score;
+          return a.name.localeCompare(b.name);
+        } else {
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        }
+      });
+
+      // Render 1: Public Leaderboard Row View
+      leaderboardView.innerHTML = sortedTeams.map((team, index) => {
+        const teamColor = team.color || '#6366f1';
+        const rank = index + 1;
+        
+        let rankBadgeClass = "bg-slate-800 text-slate-300 border-slate-700";
+        if (rank === 1 && team.score > 0) rankBadgeClass = "bg-amber-500/20 text-amber-300 border-amber-500/40 font-extrabold";
+        else if (rank === 2 && team.score > 0) rankBadgeClass = "bg-slate-300/20 text-slate-200 border-slate-300/40 font-bold";
+        else if (rank === 3 && team.score > 0) rankBadgeClass = "bg-amber-700/20 text-amber-500 border-amber-700/40 font-bold";
+
+        return `
+          <div class="glass-card rounded-xl p-4 flex items-center justify-between gap-4 transition duration-200 hover:bg-slate-800/80 relative overflow-hidden">
+            <!-- Team Color Accent Indicator -->
+            <div class="absolute left-0 top-0 bottom-0 w-2" style="background-color: ${teamColor}"></div>
+
+            <div class="flex items-center space-x-4 pl-2 min-w-0">
+              <span class="px-2.5 py-1 rounded-lg border text-sm font-mono ${rankBadgeClass}">
+                #${rank}
+              </span>
+              <div class="min-w-0">
+                <h3 class="font-bold text-slate-100 text-base sm:text-lg truncate" title="${escapeHtml(team.name)}">
+                  ${escapeHtml(team.name)}
+                </h3>
+              </div>
+            </div>
+
+            <!-- Prominent Score Number -->
+            <div class="px-4 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-right font-black text-2xl sm:text-3xl text-indigo-300 min-w-[5rem] text-center">
+              ${team.score}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Render 2: Scorekeeper Controls Grid View
+      teamsGrid.innerHTML = sortedTeams.map((team, index) => {
+        const isLeader = sortByScore && index === 0 && team.score > 0;
+        const teamColor = team.color || '#6366f1';
+        
+        return `
+          <div class="glass-card rounded-lg p-2 flex flex-col justify-between transition-all duration-200 relative overflow-hidden group hover:border-slate-600 shadow-sm">
+            
+            <div class="absolute inset-x-0 top-0 h-1" style="background-color: ${teamColor}"></div>
+
+            <!-- Team Header & Rank Badge -->
+            <div class="flex items-center justify-between gap-1 pt-0.5 mb-1">
+              <div class="min-w-0 flex-1 flex items-center space-x-1">
+                <span class="text-[10px] font-bold text-slate-400 font-mono">#${index + 1}</span>
+                <h3 class="font-bold text-slate-100 text-xs leading-tight truncate" title="${escapeHtml(team.name)}">
+                  ${escapeHtml(team.name)}
+                </h3>
+              </div>
+
+              <!-- Delete Button -->
+              <button onclick="window.deleteTeam('${team.id}', '${escapeHtml(team.name)}')" 
+                class="text-slate-500 hover:text-red-400 p-0.5 rounded hover:bg-red-500/10 transition opacity-60 group-hover:opacity-100 flex-shrink-0"
+                title="Remove Team">
+                <i class="fa-solid fa-xmark text-[10px]"></i>
+              </button>
+            </div>
+
+            <!-- Score Display -->
+            <div class="my-1 py-1 px-2 rounded bg-slate-900/90 border border-slate-800/80 text-center flex items-center justify-center space-x-1.5">
+              <div class="text-xl font-black text-slate-100 tracking-tight">
+                ${team.score}
+              </div>
+              ${isLeader ? `
+                <span class="text-[8px] font-extrabold uppercase px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  TOP
+                </span>
+              ` : ''}
+            </div>
+
+            <!-- Point Control Buttons (+1/-1 and +5/-5) -->
+            <div class="space-y-1">
+              <!-- Quick 1 Point Row -->
+              <div class="grid grid-cols-2 gap-1">
+                <button onclick="window.updateScore('${team.id}', -1)" 
+                  class="py-0.5 px-1 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-[10px] border border-slate-700/80 transition flex items-center justify-center space-x-0.5">
+                  <i class="fa-solid fa-minus text-rose-400 text-[8px]"></i>
+                  <span>1</span>
+                </button>
+
+                <button onclick="window.updateScore('${team.id}', 1)" 
+                  class="py-0.5 px-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 active:scale-95 text-indigo-200 font-bold text-[10px] border border-indigo-500/30 transition flex items-center justify-center space-x-0.5">
+                  <i class="fa-solid fa-plus text-indigo-400 text-[8px]"></i>
+                  <span>1</span>
+                </button>
+              </div>
+
+              <!-- 5 Points Row -->
+              <div class="grid grid-cols-2 gap-1">
+                <button onclick="window.updateScore('${team.id}', -5)" 
+                  class="py-0.5 px-1 rounded bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-bold text-[10px] border border-slate-700/80 transition flex items-center justify-center space-x-0.5">
+                  <i class="fa-solid fa-minus text-rose-400 text-[8px]"></i>
+                  <span>5</span>
+                </button>
+
+                <button onclick="window.updateScore('${team.id}', 5)" 
+                  class="py-0.5 px-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 active:scale-95 text-indigo-200 font-bold text-[10px] border border-indigo-500/30 transition flex items-center justify-center space-x-0.5">
+                  <i class="fa-solid fa-plus text-indigo-400 text-[8px]"></i>
+                  <span>5</span>
+                </button>
+              </div>
+
+              <!-- Manual Override -->
+              <button onclick="window.openEditModal('${team.id}', '${escapeHtml(team.name)}', ${team.score})" 
+                class="w-full py-0.5 rounded bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-[9px] font-medium border border-slate-800/80 transition flex items-center justify-center">
+                <span>Set Score</span>
+              </button>
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, function(m) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        }[m];
+      });
+    }
+
+    function updateSummaryStats() {
+      totalTeamsDisplay.innerText = `${teamsData.length} Team${teamsData.length === 1 ? '' : 's'}`;
+      
+      if (teamsData.length === 0) {
+        topScoreDisplay.innerText = '0';
+        combinedScoreDisplay.innerText = '0';
+        return;
+      }
+
+      const topScore = Math.max(...teamsData.map(t => t.score));
+      const totalPoints = teamsData.reduce((sum, t) => sum + t.score, 0);
+
+      topScoreDisplay.innerText = topScore;
+      combinedScoreDisplay.innerText = totalPoints;
+    }
+
+    // Add Team
+    addTeamForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const nameInput = document.getElementById('team-name');
+      const teamName = nameInput.value.trim();
+
+      if (!teamName) return;
+
+      if (isFirebaseActive && currentUser) {
+        try {
+          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
+          const teamsRef = getTeamsCollectionRef(currentAppId);
+          const newDocRef = doc(teamsRef);
+
+          await setDoc(newDocRef, {
+            name: teamName,
+            score: 0,
+            color: teamColorPicker.value,
+            createdAt: Date.now()
+          });
+
+          nameInput.value = '';
+          showToast(`Added team "${teamName}"`);
+        } catch (err) {
+          console.error("Error adding team to Firebase:", err);
+          showToast("Failed to add team", "error");
+        }
+      } else {
+        const newTeam = {
+          id: 'team_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          name: teamName,
+          score: 0,
+          color: teamColorPicker.value,
+          createdAt: Date.now()
+        };
+        teamsData.push(newTeam);
+        saveLocalTeamsData();
+        nameInput.value = '';
+        showToast(`Added team "${teamName}"`);
+      }
+    });
+
+    // Update Score (+1, -1, +5, -5)
+    window.updateScore = async function(teamId, delta) {
+      if (isFirebaseActive && currentUser) {
+        try {
+          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
+          const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', teamId);
+          await updateDoc(teamRef, {
+            score: increment(delta)
+          });
+        } catch (err) {
+          console.error("Error updating score:", err);
+          showToast("Failed to update score", "error");
+        }
+      } else {
+        const team = teamsData.find(t => t.id === teamId);
+        if (team) {
+          team.score += delta;
+          saveLocalTeamsData();
+        }
+      }
+    };
+
+    // Delete Team
+    window.deleteTeam = async function(teamId, teamName) {
+      if (!confirm(`Are you sure you want to delete ${teamName}?`)) return;
+
+      if (isFirebaseActive && currentUser) {
+        try {
+          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
+          const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', teamId);
+          await deleteDoc(teamRef);
+          showToast(`Deleted team "${teamName}"`);
+        } catch (err) {
+          console.error("Error deleting team:", err);
+          showToast("Failed to delete team", "error");
+        }
+      } else {
+        teamsData = teamsData.filter(t => t.id !== teamId);
+        saveLocalTeamsData();
+        showToast(`Deleted team "${teamName}"`);
+      }
+    };
+
+    // Manual Override Modal Functions
+    window.openEditModal = function(id, name, currentScore) {
+      modalTeamId.value = id;
+      modalTeamName.innerText = `Updating score for ${name}`;
+      modalScoreInput.value = currentScore;
+      editModal.classList.remove('hidden');
+      modalScoreInput.focus();
+    };
+
+    function closeModal() {
+      editModal.classList.add('hidden');
+    }
+
+    modalCloseBtn.addEventListener('click', closeModal);
+    modalCancelBtn.addEventListener('click', closeModal);
+
+    editScoreForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const teamId = modalTeamId.value;
+      const newScore = parseInt(modalScoreInput.value, 10);
+
+      if (isNaN(newScore)) return;
+
+      if (isFirebaseActive && currentUser) {
+        try {
+          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
+          const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', teamId);
+          await updateDoc(teamRef, {
+            score: newScore
+          });
+          closeModal();
+          showToast("Score overridden successfully");
+        } catch (err) {
+          console.error("Error setting score:", err);
+          showToast("Failed to override score", "error");
+        }
+      } else {
+        const team = teamsData.find(t => t.id === teamId);
+        if (team) {
+          team.score = newScore;
+          saveLocalTeamsData();
+          closeModal();
+          showToast("Score overridden successfully");
+        }
+      }
+    });
+
+    // Toggle Leaderboard Sorting Mode
+    btnToggleSort.addEventListener('click', () => {
+      sortByScore = !sortByScore;
+      sortLabelText.innerText = sortByScore ? "Ranked View" : "Order Added";
+      renderTeams();
+    });
+
+    // Reset All Scores To 0
+    resetAllBtn.addEventListener('click', async () => {
+      if (teamsData.length === 0) return;
+      if (!confirm("Are you sure you want to reset all team scores back to 0?")) return;
+
+      if (isFirebaseActive && currentUser) {
+        try {
+          const currentAppId = typeof window.appId !== 'undefined' ? window.appId : 'default-scoreboard';
+          const batch = writeBatch(db);
+          teamsData.forEach(team => {
+            const teamRef = doc(db, 'artifacts', currentAppId, 'public', 'data', 'teams', team.id);
+            batch.update(teamRef, { score: 0 });
+          });
+          await batch.commit();
+          showToast("All scores reset to 0");
+        } catch (err) {
+          console.error("Error resetting scores:", err);
+          showToast("Failed to reset scores", "error");
+        }
+      } else {
+        teamsData.forEach(t => t.score = 0);
+        saveLocalTeamsData();
+        showToast("All scores reset to 0");
+      }
+    });
+
+    // Notification Toast Helper
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      const toastIcon = document.getElementById('toast-icon');
+
+      toastMsg.innerText = message;
+
+      if (type === 'error') {
+        toastIcon.className = "fa-solid fa-circle-exclamation text-rose-400 text-lg";
+      } else {
+        toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-lg";
+      }
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2500);
+    }
+
+    // Startup Initialization
+    initColorPicker();
+    updateViewMode();
+    initFirebase();
+  </script>
+</body>
+</html>
